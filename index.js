@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config';
 
 const app = express();
@@ -36,6 +36,63 @@ app.get('/users', async (req, res) => {
      const result = await cursor.toArray();
      res.send(result);
 })
+
+//jobs api
+
+
+app.get('/jobs', async (req, res) => {
+  const cursor = jobs.find({});
+  const result = await cursor.toArray();
+  res.send(result);
+});
+
+
+app.get('/jobs/:id', async (req, res) => {
+  const id = req.params.id;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: 'Invalid job ID' });
+  }
+
+  const query = { _id: new ObjectId(id) };
+  const result = await jobs.findOne(query);
+
+  if (!result) {
+    return res.status(404).send({ message: 'Job not found' });
+  }
+
+  res.send(result);
+});
+
+
+
+app.post('/jobs', async (req, res) => {
+  const job = req.body;
+  const result = await jobs.insertOne(job);
+  res.send(result);
+});
+
+app.put('/jobs/:id', async (req, res) => {
+  const id = req.params.id;
+  const updatedJob = req.body;
+
+  const query = { _id: new ObjectId(id) };
+
+  const result = await jobs.updateOne(query, {
+    $set: updatedJob,
+  });
+
+  res.send(result);
+});
+
+
+app.delete('/jobs/:id', async (req, res) => {
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const result = await jobs.deleteOne(query);
+  res.send(result);
+});
+
 
 app.listen(port, () => {
   console.log(`hire loop is running on port ${port}`);
