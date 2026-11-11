@@ -41,7 +41,30 @@ app.get('/users', async (req, res) => {
 
 
 app.get('/jobs', async (req, res) => {
-  const cursor = jobs.find({});
+ 
+  const query = {}
+if(req.query){
+  if(req.query.jobType){
+    query.type = req.query.jobType
+  }
+  if(req.query.remote){
+    query.remote = req.query.remote === 'true';
+  }
+if(req.query.category){
+  query.category = req.query.category;
+}
+
+   if (req.query.search) {
+    query.$or = [
+      { title: { $regex: req.query.search, $options: 'i' } },
+      { responsibilities: { $regex: req.query.search, $options: 'i' } },
+      { company: { $regex: req.query.search, $options: 'i' } },
+      { requirements: { $regex: req.query.search, $options: 'i' } },
+    ];
+  }
+}
+
+  const cursor = jobs.find(query);
   const result = await cursor.toArray();
   res.send(result);
 });
@@ -67,7 +90,12 @@ app.get('/jobs/:id', async (req, res) => {
 
 
 app.post('/jobs', async (req, res) => {
-  const job = req.body;
+  const job = {
+    ...req.body,
+    applicants: 0,
+    datePosted: new Date().toISOString(),
+  };
+
   const result = await jobs.insertOne(job);
   res.send(result);
 });
