@@ -27,6 +27,13 @@ const database = connectedClient.db("hireloopdb");
 const users = database.collection("user");
 const jobs = database.collection("jobs");
 const applications = database.collection("applications");
+const savedJobs = database.collection("savedJobs");
+
+// Prevent duplicate saved jobs for the same user
+await savedJobs.createIndex(
+  { userId: 1, jobId: 1 },
+  { unique: true }
+);
 
 app.get('/', (req, res) => {
   res.send('Hireloop server is running');
@@ -158,6 +165,127 @@ app.patch('/applications/:id/archive', async (req, res) => {
   res.send(result)
 })
 
+
+
+// saved jobs apis
+
+// Get saved jobs for a specific user
+app.get('/saved-jobs', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).send({
+      message: 'User ID is required',
+    });
+  }
+
+  const savedJobsList = await savedJobs
+    .find({ userId })
+    .sort({ savedAt: -1 })
+    .toArray();
+
+  const result = await Promise.all(
+    savedJobsList.map(async (savedJob) => {
+      if (!ObjectId.isValid(savedJob.jobId)) {
+        return null;
+      }
+
+      const job = await jobs.findOne({
+        _id: new ObjectId(savedJob.jobId),
+      });
+
+      if (!job) {
+        return null;
+      }
+
+      return {
+        ...savedJob,
+        job,
+      };
+    })
+  );
+
+  return res.send(result.filter(Boolean));
+});
+
+
+// Save a job
+app.post('/saved-jobs', async (req, res) => {
+  const { userId, jobId } = req.body;
+
+  if (!userId || !jobId) {
+    return res.status(400).send({
+      message: 'User ID and Job ID are required',
+    });
+  }
+
+  if (!ObjectId.isValid(jobId)) {
+    return res.status(400).send({
+      message: 'Invalid Job ID',
+    });
+  }
+
+  const job = await jobs.findOne({
+    _id: new ObjectId(jobId),
+  });
+
+  if (!job) {
+    return res.status(404).send({
+      message: 'Job not found',
+    });
+  }
+
+  const savedJob = {
+    userId,
+    jobId,
+    savedAt: new Date(),
+  };
+
+  try {
+    const result = await savedJobs.insertOne(savedJob);
+
+    res.status(201).send({
+      message: 'Job saved successfully',
+      insertedId: result.insertedId,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).send({
+        message: 'Job already saved',
+      });
+    }
+
+    res.status(500).send({
+      message: 'Failed to save job',
+    });
+  }
+});
+
+
+// Remove a saved job
+app.delete('/saved-jobs/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({
+      message: 'Invalid Saved Job ID',
+    });
+  }
+
+  const result = await savedJobs.deleteOne({
+    _id: new ObjectId(id),
+  });
+
+  if (result.deletedCount === 0) {
+    return res.status(404).send({
+      message: 'Saved job not found',
+    });
+  }
+
+  res.send({
+    message: 'Saved job removed successfully',
+  });
+});
 
 app.listen(port, () => {
   console.log(`hire loop is running on port ${port}`);
