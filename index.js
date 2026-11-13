@@ -26,6 +26,7 @@ const connectedClient = await connectToMongoDB();
 const database = connectedClient.db("hireloopdb");
 const users = database.collection("user");
 const jobs = database.collection("jobs");
+const applications = database.collection("applications");
 
 app.get('/', (req, res) => {
   res.send('Hireloop server is running');
@@ -39,9 +40,7 @@ app.get('/users', async (req, res) => {
 
 //jobs api
 
-
 app.get('/jobs', async (req, res) => {
- 
   const query = {}
 if(req.query){
   if(req.query.jobType){
@@ -121,6 +120,24 @@ app.delete('/jobs/:id', async (req, res) => {
   res.send(result);
 });
 
+
+
+// applications related apis
+
+
+app.get('/applications', async (req, res) => {
+  const query = { userId: req.query.userId };
+
+  const result = await applications.find(query).toArray();
+
+  res.send(result);
+})
+
+app.post('/applications', async (req, res) =>{
+  const application = req.body;
+  const result = await applications.insertOne(application);
+  res.send(result);
+})
 
 app.listen(port, () => {
   console.log(`hire loop is running on port ${port}`);
