@@ -133,11 +133,31 @@ app.get('/applications', async (req, res) => {
   res.send(result);
 })
 
-app.post('/applications', async (req, res) =>{
-  const application = req.body;
-  const result = await applications.insertOne(application);
-  res.send(result);
+app.post('/applications', async (req, res) => {
+  const application = {
+    ...req.body,
+    isArchived: false,
+  }
+
+  const result = await applications.insertOne(application)
+  res.send(result)
 })
+
+// Archive / Unarchive an application
+app.patch('/applications/:id/archive', async (req, res) => {
+  const id = req.params.id
+  const { isArchived } = req.body
+
+  const query = { _id: new ObjectId(id) }
+  const updateDoc = {
+    $set: { isArchived },
+  }
+
+  const result = await applications.updateOne(query, updateDoc)
+
+  res.send(result)
+})
+
 
 app.listen(port, () => {
   console.log(`hire loop is running on port ${port}`);
