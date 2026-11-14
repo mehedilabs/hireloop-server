@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config';
+import Stripe from 'stripe';
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -28,6 +30,8 @@ const users = database.collection("user");
 const jobs = database.collection("jobs");
 const applications = database.collection("applications");
 const savedJobs = database.collection("savedJobs");
+const payments = database.collection("payments");
+
 
 // Prevent duplicate saved jobs for the same user
 await savedJobs.createIndex(
@@ -39,10 +43,19 @@ app.get('/', (req, res) => {
   res.send('Hireloop server is running');
 });
 
+//users related apis
 app.get('/users', async (req, res) => { 
      const cursor = users.find({});
      const result = await cursor.toArray();
      res.send(result);
+})
+
+app.get('/users/:id/premium', async (req, res) =>{
+  const id = req.params.id;
+  const query = {_id: new ObjectId(id)};
+  const result = await users.findOne(query, {projection: {premium: 1}});
+  res.send(result);
+
 })
 
 //jobs api
@@ -296,6 +309,54 @@ app.delete('/saved-jobs/:id', async (req, res) => {
     message: 'Saved job removed successfully',
   });
 });
+
+//payments related apis
+
+app.post('/payments/checkout-verify', async (req, res)=>{
+    const {sessionId} = req.body;
+  
+    if(!sessionId){
+        return res.send({success:false, message:'Session ID is required'})
+    }
+
+    const { status, payment_status, customer_email, metadata, payment_intent, } =
+    await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (status === 'complete' && payment_status === 'paid') {
+
+      const sessionQuery = {sessionId};
+      const existingPayment = await payments.findOne(sessionQuery);
+      if(existingPayment){
+        return res.send({success:false, message: ' peyment already verified'})
+      }
+ 
+    const payment ={
+      sessionId,
+      status,
+      payment_status,
+      customer_email,
+      userId: metadata.userId,
+      payment_date: new Date(),
+      payment_intent,};
+    const result = await payments.insertOne(payment);
+
+    const query = {_id: new ObjectId(metadata.userId)}
+
+    const updatedDoc ={
+      $set: {
+        premium: true,
+      }
+    }
+     const updateResult = await users.updateOne(
+        query,
+        updatedDoc
+     );
+     res.send({success:true, result, updateResult});
+     return
+    }
+    res.send({success: false, message: 'payment verification failed'});
+})
+
 
 app.listen(port, () => {
   console.log(`hire loop is running on port ${port}`);
