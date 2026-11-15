@@ -171,6 +171,9 @@ app.get('/applications', async (req, res) => {
   if(req.query.applicantId){
     query.userId = req.query.applicantId;
   }
+  if(req.query.jobId){
+    query.jobId = req.query.jobId;
+  }
   const result = await applications.find(query).toArray();
   res.send(result);
 })
@@ -191,6 +194,18 @@ app.post('/applications', async (req, res) => {
   }
 
   const result = await applications.insertOne(application)
+  res.send(result)
+})
+
+app.patch('/applications/:id', async (req, res) =>{
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const updateDoc = {
+    $set: { 
+      status: req.body.status,
+    }
+  }
+  const result = await applications.updateOne(query, updateDoc)
   res.send(result)
 })
 
