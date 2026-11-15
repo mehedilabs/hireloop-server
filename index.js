@@ -77,7 +77,9 @@ if(req.query){
 if(req.query.category){
   query.category = req.query.category;
 }
-
+if (req.query.userId) {
+  query.userId = req.query.userId;
+}
    if (req.query.search) {
     query.$or = [
       { title: { $regex: req.query.search, $options: 'i' } },
