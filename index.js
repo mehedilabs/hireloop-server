@@ -53,7 +53,12 @@ app.get('/users', async (req, res) => {
 app.get('/users/:id/premium', async (req, res) =>{
   const id = req.params.id;
   const query = {_id: new ObjectId(id)};
-  const result = await users.findOne(query, {projection: {premium: 1}});
+  const result = await users.findOne(query, {
+    projection: {
+    premium: 1,
+    recruiterPremium: 1,
+  },
+});
   res.send(result);
 
 })
@@ -88,6 +93,20 @@ if(req.query.category){
   res.send(result);
 });
 
+// Get total job posts by a specific recruiter
+app.get('/jobs/count', async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).send({
+      message: 'User ID is required',
+    });
+  }
+
+  const count = await jobs.countDocuments({ userId });
+
+  res.send({ count });
+});
 
 app.get('/jobs/:id', async (req, res) => {
   const id = req.params.id;
@@ -312,50 +331,81 @@ app.delete('/saved-jobs/:id', async (req, res) => {
 
 //payments related apis
 
-app.post('/payments/checkout-verify', async (req, res)=>{
-    const {sessionId} = req.body;
-  
-    if(!sessionId){
-        return res.send({success:false, message:'Session ID is required'})
+
+app.post('/payments/checkout-verify', async (req, res) => {
+  const { sessionId } = req.body;
+
+  if (!sessionId) {
+    return res.send({
+      success: false,
+      message: 'Session ID is required',
+    });
+  }
+
+  const {
+    status,
+    payment_status,
+    customer_email,
+    metadata,
+    payment_intent,
+  } = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (status === 'complete' && payment_status === 'paid') {
+    const sessionQuery = { sessionId };
+    const existingPayment = await payments.findOne(sessionQuery);
+
+    if (existingPayment) {
+      return res.send({
+        success: false,
+        message: 'Payment already verified',
+      });
     }
 
-    const { status, payment_status, customer_email, metadata, payment_intent, } =
-    await stripe.checkout.sessions.retrieve(sessionId);
+    const plan = metadata.plan || 'seeker';
 
-    if (status === 'complete' && payment_status === 'paid') {
-
-      const sessionQuery = {sessionId};
-      const existingPayment = await payments.findOne(sessionQuery);
-      if(existingPayment){
-        return res.send({success:false, message: ' peyment already verified'})
-      }
- 
-    const payment ={
+    const payment = {
       sessionId,
       status,
       payment_status,
       customer_email,
       userId: metadata.userId,
+      plan,
       payment_date: new Date(),
-      payment_intent,};
+      payment_intent,
+    };
+
     const result = await payments.insertOne(payment);
 
-    const query = {_id: new ObjectId(metadata.userId)}
+    const query = {
+      _id: new ObjectId(metadata.userId),
+    };
 
-    const updatedDoc ={
+    const premiumField =
+      plan === 'recruiter'
+        ? 'recruiterPremium'
+        : 'premium';
+
+    const updateResult = await users.updateOne(query, {
       $set: {
-        premium: true,
-      }
-    }
-     const updateResult = await users.updateOne(
-        query,
-        updatedDoc
-     );
-     res.send({success:true, result, updateResult});
-     return
-    }
-    res.send({success: false, message: 'payment verification failed'});
-})
+        [premiumField]: true,
+      },
+    });
+
+    res.send({
+      success: true,
+      result,
+      updateResult,
+    });
+
+    return;
+  }
+
+  res.send({
+    success: false,
+    message: 'Payment verification failed',
+  });
+});
+
 
 
 app.listen(port, () => {
