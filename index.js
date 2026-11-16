@@ -14,6 +14,11 @@ app.use(cors())
 
 const client = new MongoClient(`mongodb://${process.env.DB_USER}:${process.env.DB_PASSWORD}@ac-ez5nunr-shard-00-00.hpkuazb.mongodb.net:27017,ac-ez5nunr-shard-00-01.hpkuazb.mongodb.net:27017,ac-ez5nunr-shard-00-02.hpkuazb.mongodb.net:27017/?ssl=true&replicaSet=atlas-8l7sww-shard-0&authSource=admin`);
 
+
+// const myLogger =(req, res, next) =>{
+
+// }
+
 export async function connectToMongoDB() {
   try {
     await client.connect();
@@ -27,6 +32,7 @@ export async function connectToMongoDB() {
 const connectedClient = await connectToMongoDB();
 const database = connectedClient.db("hireloopdb");
 const users = database.collection("user");
+const sessions = database.collection("session");
 const jobs = database.collection("jobs");
 const applications = database.collection("applications");
 const savedJobs = database.collection("savedJobs");
@@ -42,6 +48,36 @@ await savedJobs.createIndex(
 app.get('/', (req, res) => {
   res.send('Hireloop server is running');
 });
+
+const verifyToken =async (req, res, next) => {
+   const authHeader = req.headers.authorization;
+   if(!authHeader){
+    res.status(401).send({status: 401, message: 'Unauthorized'});
+    return;
+   }
+   const token = authHeader.split(' ')[1];
+   if(!token){
+    res.status(401).send({status: 401, message: 'Unauthorized'});
+    return;
+   }
+
+   const query = {token};
+   const session = await sessions.findOne(query);
+   if(!session){
+    res.status(401).send({status: 401, message: 'Unauthorized'});
+    return;
+   }
+  const userId = session.userId;
+
+  const userQuery = {_id: new ObjectId(userId)};
+  const user = await users.findOne(userQuery);
+  if(!user){
+    res.status(401).send({status: 401, message: 'Unauthorized'});
+    return;
+  }
+   req.user = user;
+   next()
+}
 
 //users related apis
 app.get('/users', async (req, res) => { 
@@ -159,7 +195,8 @@ app.delete('/users/:id', async (req, res) => {
   res.send({ message: 'User deleted successfully' });
 });
 
-//jobs api
+
+//jobs related api
 
 app.get('/jobs', async (req, res) => {
   const query = {}
@@ -262,12 +299,25 @@ app.delete('/jobs/:id', async (req, res) => {
 // applications related apis
 
 
-app.get('/applications', async (req, res) => {
+app.get('/applications',verifyToken, async (req, res) => {
   const query = {};
   if(req.query.applicantId){
     query.userId = req.query.applicantId;
   }
   if(req.query.jobId){
+   const jobQuery = { _id: new ObjectId(req.query.jobId)};
+   const job = await jobs.findOne(jobQuery);
+
+   if (!job) {
+  res.status(404).send({ message: 'Job not found' });
+  return;
+}
+
+   if(job.recruiterId !== req.user._id.toString() && req.user.role !== 'admin' ){
+     res.status(403).send({message: 'Forbidden'});
+     return;
+   }
+
     query.jobId = req.query.jobId;
   }
   const result = await applications.find(query).toArray();
