@@ -63,6 +63,102 @@ app.get('/users/:id/premium', async (req, res) =>{
 
 })
 
+// Update user role
+app.patch('/users/:id/role', async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: 'Invalid User ID' });
+  }
+
+  if (!['admin', 'recruiter', 'seeker'].includes(role)) {
+    return res.status(400).send({ message: 'Invalid user role' });
+  }
+
+  const result = await users.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { role } }
+  );
+
+  if (result.matchedCount === 0) {
+    return res.status(404).send({ message: 'User not found' });
+  }
+
+  res.send({ message: 'User role updated successfully' });
+});
+
+// Suspend user
+app.patch('/users/:id/ban', async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: 'Invalid User ID' });
+  }
+
+  const result = await users.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        banned: true,
+        banReason: 'Suspended by admin',
+        banExpires: null,
+      },
+    }
+  );
+
+  if (result.matchedCount === 0) {
+    return res.status(404).send({ message: 'User not found' });
+  }
+
+  res.send({ message: 'User suspended successfully' });
+});
+
+// Activate user
+app.patch('/users/:id/unban', async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: 'Invalid User ID' });
+  }
+
+  const result = await users.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: { banned: false },
+      $unset: {
+        banReason: '',
+        banExpires: '',
+      },
+    }
+  );
+
+  if (result.matchedCount === 0) {
+    return res.status(404).send({ message: 'User not found' });
+  }
+
+  res.send({ message: 'User activated successfully' });
+});
+
+// Delete user
+app.delete('/users/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: 'Invalid User ID' });
+  }
+
+  const userId = new ObjectId(id);
+
+  const result = await users.deleteOne({ _id: userId });
+
+  if (result.deletedCount === 0) {
+    return res.status(404).send({ message: 'User not found' });
+  }
+
+  res.send({ message: 'User deleted successfully' });
+});
+
 //jobs api
 
 app.get('/jobs', async (req, res) => {
