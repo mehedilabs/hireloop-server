@@ -213,6 +213,7 @@ app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
         banExpires: 1,
         premium: 1,
         recruiterPremium: 1,
+        createdAt: 1,
       },
     }
   ).toArray();
